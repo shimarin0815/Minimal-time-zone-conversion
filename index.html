@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミニマル・タイムゾーン変換</title>
+    <style>
+        /* CSS (見た目) はここに書きます */
+        
+        /* 基本設定 */
+        :root {
+            --bg-color: #f4f7f6; /* 背景色 */
+            --card-bg: #ffffff;  /* カード背景色 */
+            --text-color: #333333; /* 基本テキスト色 */
+            --primary-color: #007aff; /* メインカラー (JST) */
+            --shadow-color: rgba(0, 0, 0, 0.08); /* 影の色 */
+            --clock-border: #e0e0e0; /* 時計の枠線 */
+            --hand-hour: #333333;   /* 時針 */
+            --hand-minute: #666666; /* 分針 */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        /* 全体の入れ物 */
+        .container {
+            width: 100%;
+            max-width: 900px;
+            margin: 20px auto;
+        }
+
+        /* タイトル */
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            font-weight: 600;
+            margin-bottom: 30px;
+        }
+
+        /* JST入力エリア */
+        .jst-input {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 4px 12px var(--shadow-color);
+            margin-bottom: 30px;
+        }
+
+        .jst-input label {
+            display: block;
+            font-size: 1.1em;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .jst-input input[type="time"] {
+            font-size: 2em;
+            font-weight: 600;
+            padding: 10px 15px;
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+            background-color: #fdfdfd;
+            color: var(--primary-color);
+            /* ブラウザ特有のスタイルを消す */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+
+        /* 時計を並べるグリッド */
+        .clock-grid {
+            display: grid;
+            /* 1列の最小幅220px、最大1fr。自動で折り返す */
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+        }
+
+        /* 各都市の時計カード */
+        .clock-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px var(--shadow-color);
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .clock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .clock-card h3 {
+            margin: 0 0 10px 0;
+            font-weight: 600;
+            font-size: 1.25em;
+        }
+
+        /* アナログ時計の盤面 */
+        .analog-clock {
+            width: 160px;
+            height: 160px;
+            border: 3px solid var(--clock-border);
+            border-radius: 50%; /* 完璧な円にする */
+            margin: 15px auto;
+            position: relative; /* 針の基準位置 */
+            background-color: #fff;
+        }
+
+        /* 時計の中心の点 */
+        .analog-clock::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background-color: var(--hand-hour);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        /* 時計の針 (共通スタイル) */
+        .hand {
+            width: 4px;
+            background-color: black;
+            position: absolute;
+            bottom: 50%; /* 根元を中心にする */
+            left: 50%;
+            transform-origin: bottom center; /* 回転の軸を根元にする */
+            border-radius: 2px;
+            /* 動きを滑らかにする */
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 時針 */
+        .hour-hand {
+            width: 6px;
+            height: 50px; /* 長さ */
+            background-color: var(--hand-hour);
+            transform: translateX(-50%) rotate(0deg); /* 初期位置 */
+            z-index: 5;
+        }
+
+        /* 分針 */
+        .minute-hand {
+            width: 4px;
+            height: 70px; /* 長さ */
+            background-color: var(--hand-minute);
+            transform: translateX(-50%) rotate(0deg); /* 初期位置 */
+            z-index: 6;
+        }
+        
+        /* デジタル時計 */
+        .digital-time {
+            font-size: 1.8em;
+            font-weight: 500;
+            margin: 10px 0 5px 0;
+            letter-spacing: 1px;
+        }
+
+        /* 日付 (昨日/今日/明日) */
+        .date-offset {
+            font-size: 0.9em;
+            color: #888;
+            margin: 0;
+            min-height: 1.2em; /* 高さを確保してガタツキ防止 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>ミニマル・タイムゾーン変換</h1>
+
+        <div class="jst-input">
+            <label for="jstTime">JST (日本時間) を入力してください</label>
+            <input type="time" id="jstTime">
+        </div>
+
+        <div class="clock-grid" id="clockGrid">
+            </div>
+    </div>
+
+    <script>
+        // JavaScript (頭脳・動き) はここに書きます
+
+        // 1. 表示したい都市をリストにする
+        // name: 表示名
+        // tz: IANAタイムゾーン名 (これで世界中の時間を正確に計算できる)
+        // id: HTMLで識別するための名前 (なんでも良いが、他と被らないように)
+        const cities = [
+            { name: 'ロンドン', tz: 'Europe/London', id: 'ldn' },
+            { name: 'ニューヨーク', tz: 'America/New_York', id: 'nyc' },
+            { name: 'サンフランシスコ', tz: 'America/Los_Angeles', id: 'sfo' },
+        ];
+
+        // 2. HTMLの部品を取得
+        const jstInput = document.getElementById('jstTime');
+        const clockGrid = document.getElementById('clockGrid');
+
+        // 3. 都市のリストから、HTMLの時計カードを自動で生成する
+        function createClockCards() {
+            let html = ''; // 空のHTML文字列を用意
+            cities.forEach(city => {
+                // citiesリストの都市1つひとつに対して、HTMLの部品を作る
+                html += `
+                    <div class="clock-card" id="${city.id}">
+                        <h3>${city.name}</h3>
+                        <div class="analog-clock">
+                            <div class="hand hour-hand"></div>
+                            <div class="hand minute-hand"></div>
+                        </div>
+                        <p class="digital-time">--:--</p>
+                        <p class="date-offset">（計算中...）</p>
+                    </div>
+                `;
+            });
+            clockGrid.innerHTML = html; // 出来上がったHTMLをグリッドに挿入
+        }
+
+        // 4. すべての時計を更新するメインの関数
+        function updateClocks() {
+            // (A) 基準となるJSTの「日付」と「時間」を取得
+            
+            // "en-CA"は "YYYY-MM-DD" 形式で日付をくれる
+            const jstDateFormatter = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Tokyo'
+            });
+            const todayInJST = new Date(); // 今のPC時間
+            
+            // 今のPC時間を使って「今日の日付 (JST)」を計算
+            const [jstYear, jstMonth, jstDay] = jstDateFormatter.format(todayInJST).split('-');
+            
+            // ユーザーが入力した時間 (例: "14:30")
+            const [inputHours, inputMinutes] = jstInput.value.split(':');
+
+            // (B) JSTの日付と入力時間から、世界標準時(UTC)の「正確な瞬間」を計算
+            // "2025-11-02T14:30:00+09:00" という国際的な形式の文字列を作る
+            // これで「日本時間の2025年11月2日 14時30分」という瞬間を正確に示せる
+            const jstISOString = `${jstYear}-${jstMonth}-${jstDay}T${inputHours}:${inputMinutes}:00+09:00`;
+            
+            // この文字列から、Dateオブジェクト（時間の計算ができる部品）を作る
+            const baseDate = new Date(jstISOString);
+
+            // (C) JSTの「日付」を比較用に取っておく
+            const jstDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(baseDate);
+
+            // (D) 各都市の時間を計算して、表示を更新する
+            cities.forEach(city => {
+                // (D-1) デジタル時計の計算
+                // 'en-US' (英語圏) / 24時間表記 (hour12: false) で時間を取得
+                const digitalFormatter = new Intl.DateTimeFormat('en-US', {
+                    timeZone: city.tz,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+
+                const timeString = digitalFormatter.format(baseDate); // 例: "05:30"
+                const [hours, minutes] = timeString.split(':').map(Number); // [5, 30]
+
+                // (D-2) アナログ時計の「角度」を計算
+                // 分針: 1分で6度 (60分で360度)
+                const minutesRotation = minutes * 6;
+                // 時針: 1時間で30度 (12時間で360度) + 1分で0.5度
+                const hoursRotation = (hours % 12) * 30 + minutes * 0.5;
+
+                // (D-3) 日付 (昨日/同日/翌日) の計算
+                const targetDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: city.tz });
+                const targetDateStr = targetDateFormatter.format(baseDate); // 例: "2025-11-01"
+
+                let dateOffsetLabel = '（同日）';
+                if (targetDateStr < jstDateStr) {
+                    dateOffsetLabel = '（昨日）';
+                } else if (targetDateStr > jstDateStr) {
+                    dateOffsetLabel = '（翌日）';
+                }
+
+                // (D-4) HTMLの表示を更新！
+                const card = document.getElementById(city.id);
+                card.querySelector('.digital-time').textContent = timeString;
+                card.querySelector('.date-offset').textContent = dateOffsetLabel;
+                card.querySelector('.hour-hand').style.transform = `translateX(-50%) rotate(${hoursRotation}deg)`;
+                card.querySelector('.minute-hand').style.transform = `translateX(-50%) rotate(${minutesRotation}deg)`;
+            });
+        }
+
+        // 5. ページが読み込まれたときの初期設定
+        function initialize() {
+            // (A) 時計カードを作る
+            createClockCards();
+
+            // (B) JST入力欄に、現在のJSTの時間を自動でセットする
+            const jstTimeFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Tokyo',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            const currentTimeInJST = jstTimeFormatter.format(new Date()); // 例: "09:50"
+            jstInput.value = currentTimeInJST;
+
+            // (C) 最初の時計の更新を実行
+            updateClocks();
+
+            // (D) JSTの時間が変更されたら、自動でupdateClocks関数を呼ぶように「予約」
+            jstInput.addEventListener('input', updateClocks);
+        }
+
+        // 実行！
+        initialize();
+    </script>
+</body>
+</html>
